@@ -126,23 +126,33 @@ function TArea({ label, value, onChange, placeholder, rows = 4, hint }) {
 // ─── PROMPTS ──────────────────────────────────────────────────────────────────
 
 function buildGeneratePrompt(f) {
-  return `You are an elite growth operator identifying high-quality, high-probability leads.
-Your job is NOT to list many leads. Find only the most promising ones.
-Strictly filter out weak, inactive, or low-quality projects.
+  return `You are an elite growth operator hunting for early-stage companies that desperately need growth help but have not figured it out yet.
 
-ACCURACY RULES - NON NEGOTIABLE:
-- Only return REAL companies that actually exist. Use your web search tool to verify.
-- Only include a website URL if you have confirmed it is real and active.
-- Only include a Twitter/X handle if you have confirmed the account exists.
-- If you cannot verify a website or handle, leave those fields as empty strings.
-- Do NOT guess or fabricate URLs or social handles under any circumstances.
+TARGET STAGE: Pre-launch or launched within the last 6 months. NOT established companies. NOT well-known brands. Find the ones that are still figuring things out.
 
-Apply these filters to every lead before including it:
-- Active presence (recent posts, updates, visible activity)
-- Visible growth effort or momentum
-- Clear pain points and weaknesses
-- Signs of seriousness (team, branding, product)
-- Potential ability to pay for services
+PAIN SIGNALS TO LOOK FOR (must have at least 3):
+- No clear growth strategy visible from their public presence
+- Low community engagement (few followers, low interaction)
+- Weak or generic branding that blends in
+- Small but active team (1-5 people visibly working)
+- Inconsistent or sporadic content and posting
+
+ABILITY TO PAY SCORING:
+- Score 8-10: Has raised funding, active hiring, or has paying customers
+- Score 5-7: Bootstrapped but generating revenue or has grants
+- Score 1-4: Very early, unclear funding - include only if pain signals are extremely strong
+
+HARD FILTERS - exclude any lead that:
+- Is an established company (over 2 years old with strong brand)
+- Has a large following (50k+ Twitter followers)
+- Already has a clear, professional growth operation
+- Is a well-known name in their space
+
+ACCURACY RULES:
+- Only return companies that genuinely exist.
+- Only include website URLs you are confident are real. If unsure, use empty string.
+- Only include Twitter handles you are confident exist. If unsure, use empty string.
+- Never fabricate URLs or handles.
 
 TARGET PROFILE:
 - Niche/Industry: ${f.niche}
@@ -176,16 +186,27 @@ Return exactly 10 leads in this format:
 }
 
 function buildQualifyPrompt(f) {
-  return `You are an elite growth operator qualifying leads for high-probability outreach.
+  return `You are an elite growth operator qualifying early-stage leads for high-probability outreach.
 Your job is to analyze the provided context and identify only the strongest leads.
-Strictly filter out weak, inactive, or low-quality prospects.
 
-Apply these filters:
-- Active presence (recent posts, updates)
-- Visible growth effort
-- Clear pain points
-- Signs of seriousness (team, branding, product)
-- Potential ability to pay
+TARGET STAGE: Pre-launch or launched within the last 6 months. Skip anything established or well-known.
+
+PAIN SIGNALS TO LOOK FOR (must have at least 3):
+- No clear growth strategy visible
+- Low community engagement
+- Weak or generic branding
+- Small but active team (1-5 people)
+- Inconsistent or sporadic content
+
+ABILITY TO PAY SCORING:
+- Score 8-10: Has raised funding, active hiring, or paying customers
+- Score 5-7: Bootstrapped but generating revenue or has grants
+- Score 1-4: Very early, unclear funding
+
+HARD FILTERS - skip any lead that:
+- Is an established company with strong brand recognition
+- Has 50k+ Twitter followers
+- Already has a professional growth operation running
 
 SERVICE CONTEXT:
 - Service being offered: ${f.service || "growth strategy, brand architecture, marketing"}
