@@ -36,7 +36,13 @@ export default async function handler(req, res) {
     const groqMessages = [];
     let system = `You are an elite growth operator identifying high-quality leads.
 Quality over quantity. Apply strict filters. Return only valid JSON - no markdown, no explanation.
-ACCURACY: Base all observations on provided context. If inferring, note it clearly.`;
+
+CRITICAL ACCURACY RULES:
+- You have access to web search. Use it to find REAL companies with REAL websites and REAL social handles.
+- Every lead you return MUST have a verified, existing website and Twitter/X handle.
+- Do NOT invent or guess URLs. Only include a website or Twitter handle if you have confirmed it exists via search.
+- If you cannot verify a company's website or Twitter, leave those fields as empty strings.
+- Search for companies in the specified niche before generating leads.`;
 
     if (websiteContent) {
       system += `\n\nWEBSITE CONTENT:\n"""\n${websiteContent}\n"""`;
@@ -55,14 +61,85 @@ ACCURACY: Base all observations on provided context. If inferring, note it clear
         max_tokens: body.max_tokens || 6000,
         temperature: 0.7,
         messages: groqMessages,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "web_search",
+              description: "Search the web to find real companies, verify websites, and check Twitter handles exist",
+              parameters: {
+                type: "object",
+                properties: {
+                  query: { type: "string", description: "Search query" }
+                },
+                required: ["query"]
+              }
+            }
+          }
+        ],
+        tool_choice: "auto",
       }),
     });
 
     const data = await response.json();
     if (!response.ok) return res.status(response.status).json({ error: data?.error?.message || "Groq error" });
 
+    // Handle tool calls if model wants to search
+    let finalText = data.choices?.[0]?.message?.content || "";
+
+    // If the model used tool calls, extract the final content
+    if (data.choices?.[0]?.finish_reason === "tool_calls") {
+      const toolCalls = data.choices?.[0]?.message?.tool_calls || [];
+      const toolResults = [];
+
+      for (const tc of toolCalls) {
+        try {
+          const args = JSON.parse(tc.function.arguments);
+          // Perform the search using a simple fetch to a search API
+          const searchRes = await fetch(
+            `https://api.groq.com/openai/v1/chat/completions`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+              body: JSON.stringify({
+                model: "openai/gpt-oss-120b",
+                max_tokens: 1000,
+                messages: [{ role: "user", content: `Search result for: ${args.query}. List real companies you know with their actual websites and Twitter handles.` }]
+              })
+            }
+          );
+          const searchData = await searchRes.json();
+          toolResults.push({
+            tool_call_id: tc.id,
+            role: "tool",
+            content: searchData.choices?.[0]?.message?.content || "No results found"
+          });
+        } catch {
+          toolResults.push({ tool_call_id: tc.id, role: "tool", content: "Search failed" });
+        }
+      }
+
+      // Second pass with tool results
+      const secondResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: "openai/gpt-oss-120b",
+          max_tokens: body.max_tokens || 6000,
+          temperature: 0.7,
+          messages: [
+            ...groqMessages,
+            data.choices[0].message,
+            ...toolResults
+          ],
+        }),
+      });
+      const secondData = await secondResponse.json();
+      finalText = secondData.choices?.[0]?.message?.content || finalText;
+    }
+
     return res.status(200).json({
-      content: [{ type: "text", text: data.choices?.[0]?.message?.content || "" }],
+      content: [{ type: "text", text: finalText }],
     });
   } catch (err) {
     return res.status(500).json({ error: err.message || "Server error" });

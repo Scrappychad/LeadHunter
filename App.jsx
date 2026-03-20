@@ -130,6 +130,13 @@ function buildGeneratePrompt(f) {
 Your job is NOT to list many leads. Find only the most promising ones.
 Strictly filter out weak, inactive, or low-quality projects.
 
+ACCURACY RULES - NON NEGOTIABLE:
+- Only return REAL companies that actually exist. Use your web search tool to verify.
+- Only include a website URL if you have confirmed it is real and active.
+- Only include a Twitter/X handle if you have confirmed the account exists.
+- If you cannot verify a website or handle, leave those fields as empty strings.
+- Do NOT guess or fabricate URLs or social handles under any circumstances.
+
 Apply these filters to every lead before including it:
 - Active presence (recent posts, updates, visible activity)
 - Visible growth effort or momentum
