@@ -10,53 +10,6 @@ async function serperSearch(query, serperKey, num = 10) {
   } catch { return null; }
 }
 
-function buildSearchQueries(body) {
-  const niche = body.niche || "";
-  const type = body.type || "";
-  const service = body.service || "";
-  const platform = body.platform || "";
-
-  // Determine industry scope
-  const isWeb3 = /web3|crypto|defi|nft|blockchain|wallet|dao|token/i.test(niche + type);
-  const isSaaS = /saas|software|startup|tech/i.test(niche + type);
-  const isAI = /ai|artificial intelligence|machine learning/i.test(niche + type);
-  const isFintech = /fintech|finance|payment/i.test(niche + type);
-
-  const queries = [];
-
-  // Primary discovery queries
-  queries.push(`new ${niche} startup recently launched 2024 2025 site:twitter.com OR site:x.com`);
-  queries.push(`"just launched" OR "new project" ${niche} ${type} twitter handle`);
-
-  // Industry-specific queries
-  if (isWeb3 || (!isSaaS && !isAI && !isFintech)) {
-    queries.push(`new crypto web3 DeFi NFT project launched 2024 2025 twitter x.com`);
-    queries.push(`new blockchain wallet DAO project site:x.com 2024 2025`);
-    queries.push(`"launching soon" OR "just launched" web3 project twitter 2025`);
-  }
-  if (isSaaS || niche === "") {
-    queries.push(`new SaaS startup product launched 2024 2025 twitter`);
-  }
-  if (isAI || niche === "") {
-    queries.push(`new AI tool product launched 2024 2025 twitter site:x.com`);
-  }
-  if (isFintech) {
-    queries.push(`new fintech startup launched 2024 2025 twitter`);
-  }
-
-  // Platform-specific
-  if (platform && /product hunt/i.test(platform)) {
-    queries.push(`site:producthunt.com ${niche} new product 2024 2025`);
-  }
-
-  // Service-pain-point match
-  if (service) {
-    queries.push(`${niche} project "looking for" OR "need help with" ${service} twitter 2024 2025`);
-  }
-
-  return queries.slice(0, 4); // Max 4 searches to stay within free tier
-}
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -75,7 +28,6 @@ export default async function handler(req, res) {
     const isQualify = body.mode === "qualify";
 
     if (isQualify) {
-      // Qualify mode - just pass context to AI directly
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
@@ -86,8 +38,7 @@ export default async function handler(req, res) {
           messages: [
             {
               role: "system",
-              content: `You are an elite growth operator qualifying leads. Quality over quantity. Return only valid JSON - no markdown, no explanation.
-ACCURACY: Only state facts from the provided context. Never fabricate URLs or social handles.`,
+              content: `You are an elite Web3 growth operator qualifying leads. Quality over quantity. Return only valid JSON - no markdown, no explanation. Only state facts from the provided context. Never fabricate URLs or social handles.`,
             },
             ...(body.messages || []),
           ],
@@ -100,63 +51,68 @@ ACCURACY: Only state facts from the provided context. Never fabricate URLs or so
       return res.status(200).json({ content: [{ type: "text", text }] });
     }
 
-    // Generate mode - Serper first, then AI qualifies
-    const queries = buildSearchQueries(body);
+    const service = body.service || "growth strategy and brand architecture";
+
+    // Hardcoded Web3 search queries
+    const queries = [
+      `new Web3 crypto project launched 2024 2025 site:x.com OR site:twitter.com`,
+      `new DeFi NFT wallet DAO project "just launched" OR "launching" 2025 twitter`,
+      `new crypto blockchain project site:linkedin.com 2024 2025`,
+      `new web3 utility token L2 project recently launched website twitter linkedin`,
+    ];
 
     // Run all searches in parallel
     const searchResults = await Promise.all(
       queries.map(q => serperSearch(q, serperKey, 8))
     );
 
-    const combinedResults = searchResults
-      .filter(Boolean)
-      .join("\n\n========\n\n");
+    const combinedResults = searchResults.filter(Boolean).join("\n\n========\n\n");
 
     if (!combinedResults) {
-      return res.status(500).json({ error: "Search returned no results. Try a different niche or industry." });
+      return res.status(500).json({ error: "Search returned no results. Please try again." });
     }
 
-    // AI qualifies the real search results
-    const qualifyPrompt = `You are an elite growth operator. You have been given live Google search results for recently active projects in the following niche: ${body.niche || "tech/Web3"}.
+    const qualifyPrompt = `You are an elite Web3 growth operator. You have been given live Google search results for recently active Web3 projects.
 
-Your job is to extract and qualify the BEST leads from these search results.
+Extract and qualify the BEST leads from these search results.
+
+SERVICE BEING OFFERED: ${service}
 
 QUALIFICATION FILTERS:
-- Must be a real, active project (has a website or X handle visible in results)
-- Must appear recently launched or recently active (2024 or 2025 signals preferred)
-- Must show pain signals: early stage, small team, no obvious professional growth operation
-- Must have potential to pay for services like: ${body.service || "growth strategy, brand, marketing"}
-- Skip established companies with strong brand recognition
-- Prioritize Web3/crypto projects but include SaaS, AI tools, fintech if they appear strong
+- Must be a real, active Web3 project visible in the search results
+- Must be early-stage or recently launched (2024 or 2025 signals preferred)
+- Must have visible pain signals: small team, early community, no professional growth operation yet
+- Must have potential to pay for growth, brand, or marketing services
+- Skip established projects with large communities or strong brand recognition
+- Web3 scope: DeFi, NFTs, wallets, DAOs, L2s, utility tokens, crypto infrastructure, GameFi, SocialFi
 
-INDUSTRIES IN SCOPE (Web3 is priority):
-Web3, DeFi, NFTs, crypto wallets, DAOs, L2s, SaaS startups, AI tools, fintech, developer tools
+SCORING (ability to pay):
+- 8-10: Raised funding, hiring, or has visible traction and revenue signals
+- 5-7: Serious team, product launched, early but moving
+- 1-4: Too early or unclear signals
 
-ABILITY TO PAY SCORING:
-- 8-10: Has raised funding, hiring actively, or has visible traction
-- 5-7: Early but serious - active team, product launched
-- 1-4: Too early or unclear
-
-SEARCH RESULTS FROM GOOGLE (these are REAL, live results):
+SEARCH RESULTS FROM GOOGLE (real, live results):
 ${combinedResults.slice(0, 8000)}
 
-From these real search results, extract up to 10 qualifying leads. Only include projects you can confirm exist from the search results. Return valid JSON only, no markdown:
+From these results, extract up to 10 qualifying Web3 leads. Only include projects confirmed in the search results. Return valid JSON only, no markdown:
 
 [
   {
     "name": "Project Name",
     "website": "https://... (from search results only, empty string if not found)",
     "twitter": "@handle (from search results only, empty string if not found)",
-    "industry": "Web3 / DeFi / SaaS / AI / Fintech / etc",
+    "linkedin": "https://linkedin.com/company/... (from search results only, empty string if not found)",
+    "other_social": "any other social link found e.g. Discord, Telegram, Instagram (empty string if not found)",
+    "industry": "DeFi / NFT / DAO / Wallet / L2 / GameFi / etc",
     "overview": "2-3 sentence description based only on search result snippets",
     "signals": {
-      "activity": "Specific evidence from search results showing they are active",
-      "pain": "Specific visible problem or gap based on what the search results show",
-      "capability": "Why they are worth targeting - signals from search results",
-      "timing": "Why now is the right time based on search result recency"
+      "activity": "Specific evidence from search results they are active",
+      "pain": "Specific visible gap or problem based on search results",
+      "capability": "Why they are worth targeting based on search signals",
+      "timing": "Why now is the right time based on recency signals"
     },
-    "growth_gaps": "What is clearly missing based on their online presence in the search results",
-    "leverage_angle": "Where a growth strategist steps in based on their specific situation",
+    "growth_gaps": "What is clearly missing from their online presence",
+    "leverage_angle": "Where a growth strategist steps in for this specific project",
     "score": 7,
     "outreach": "4-5 sentence personalized message. Reference something specific from the search results. No fluff. Must feel written after real research."
   }
@@ -179,10 +135,7 @@ From these real search results, extract up to 10 qualifying leads. Only include 
     const text = data.choices?.[0]?.message?.content || "";
     if (!text) return res.status(500).json({ error: "Empty response" });
 
-    return res.status(200).json({
-      content: [{ type: "text", text }],
-      searchesRun: queries.length,
-    });
+    return res.status(200).json({ content: [{ type: "text", text }], searchesRun: queries.length });
 
   } catch (err) {
     return res.status(500).json({ error: err.message || "Server error" });

@@ -328,8 +328,10 @@ function LeadCard({ lead, index, expanded, onToggle }) {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {lead.website && <a href={lead.website} target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: G.accent, textDecoration: "none", background: G.surface2, border: `1px solid ${G.border}`, padding: "6px 12px", borderRadius: 8 }}>Visit Website ↗</a>}
-            {lead.twitter && <a href={`https://x.com/${lead.twitter.replace("@", "")}`} target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: G.accent, textDecoration: "none", background: G.surface2, border: `1px solid ${G.border}`, padding: "6px 12px", borderRadius: 8 }}>View X Profile ↗</a>}
+            {lead.website && <a href={lead.website} target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: G.accent, textDecoration: "none", background: G.surface2, border: `1px solid ${G.border}`, padding: "6px 12px", borderRadius: 8 }}>Website ↗</a>}
+            {lead.twitter && <a href={`https://x.com/${lead.twitter.replace("@", "")}`} target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: G.accent, textDecoration: "none", background: G.surface2, border: `1px solid ${G.border}`, padding: "6px 12px", borderRadius: 8 }}>X / Twitter ↗</a>}
+            {lead.linkedin && <a href={lead.linkedin} target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: G.accent, textDecoration: "none", background: G.surface2, border: `1px solid ${G.border}`, padding: "6px 12px", borderRadius: 8 }}>LinkedIn ↗</a>}
+            {lead.other_social && <a href={lead.other_social} target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: G.accent, textDecoration: "none", background: G.surface2, border: `1px solid ${G.border}`, padding: "6px 12px", borderRadius: 8 }}>Community ↗</a>}
           </div>
         </div>
       )}
@@ -490,7 +492,7 @@ export default function LeadHunter() {
   const [leads, setLeads] = useState([]);
   const [error, setError] = useState("");
 
-  const [genForm, setGenForm] = useState({ niche: "", type: "", service: "", description: "", platform: "" });
+  const [genForm, setGenForm] = useState({ service: "" });
   const setG = k => v => setGenForm(p => ({ ...p, [k]: v }));
 
   const [qualForm, setQualForm] = useState({ niche: "", service: "", context: "" });
@@ -498,7 +500,7 @@ export default function LeadHunter() {
 
   const reset = () => {
     setStep("form"); setLeads([]); setError("");
-    setGenForm({ niche: "", type: "", service: "", description: "", platform: "" });
+    setGenForm({ service: "" });
     setQualForm({ niche: "", service: "", context: "" });
   };
 
@@ -595,26 +597,20 @@ export default function LeadHunter() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
           <ModeToggle mode={mode} onChange={m => { setMode(m); setError(""); }} />
           <div style={{ fontSize: "0.72rem", color: G.muted }}>
-            {mode === "generate" ? "AI finds and scores 10 leads in your niche" : "Paste context and AI qualifies + scores each lead"}
+            {mode === "generate" ? "AI hunts real Web3 projects via live search" : "Paste context and AI qualifies + scores each lead"}
           </div>
         </div>
 
         <div style={{ background: G.surface, border: `1px solid ${G.border}`, borderRadius: G.radius, padding: "24px", animation: "fadeUp 0.5s ease 0.1s both" }}>
           {mode === "generate" ? (
             <>
-              <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.12em", color: G.accent, marginBottom: 20, fontWeight: 600 }}>Hunt Parameters</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 18px" }}>
-                <TInput label="Niche / Industry *" value={genForm.niche} onChange={setG("niche")} placeholder="e.g. DeFi protocols, AI tools, SaaS startups, NFT projects, fintech" hint="Web3 is priority but any tech industry works" />
-                <TInput label="Company Type" value={genForm.type} onChange={setG("type")} placeholder="e.g. Web3, Web2, Both" />
+              <div style={{ background: `${G.accent}0d`, border: `1px solid ${G.accent}25`, borderRadius: 10, padding: "10px 16px", marginBottom: 18, fontSize: "0.76rem", color: G.muted, lineHeight: 1.6 }}>
+                <span style={{ color: G.accent }}>⬡</span> Hunting across Web3 - DeFi, NFTs, wallets, DAOs, L2s, utility tokens, and crypto infrastructure projects.
               </div>
-              <TInput label="Service You're Offering" value={genForm.service} onChange={setG("service")}
+              <TInput label="Service You're Offering (optional)" value={genForm.service} onChange={setG("service")}
                 placeholder="e.g. growth strategy, brand architecture, community management"
-                hint="Helps the AI find leads with matching pain points" />
-              <TArea label="Ideal Client Description" value={genForm.description} onChange={setG("description")} rows={3}
-                placeholder="Describe your ideal client: stage, size, problems they have, what makes them a good fit."
-                hint="More detail = more targeted leads" />
-              <TInput label="Platform to Source From" value={genForm.platform} onChange={setG("platform")}
-                placeholder="e.g. Twitter/X, LinkedIn, Product Hunt, Discord" />
+                hint="Helps match leads to projects with pain points you can solve" />
+            
             </>
           ) : (
             <>
@@ -634,10 +630,10 @@ export default function LeadHunter() {
 
         <button onClick={submit} style={{ width: "100%", marginTop: 14, padding: "14px", borderRadius: G.radius, background: G.accent, border: "none", color: "#000", fontFamily: "Space Grotesk, sans-serif", fontWeight: 800, fontSize: "0.92rem", cursor: "pointer", transition: "opacity 0.2s" }}
           onMouseEnter={e => e.currentTarget.style.opacity = "0.85"} onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
-          {mode === "generate" ? "Hunt Leads" : "Qualify Leads"}
+          {mode === "generate" ? "Hunt Web3 Leads" : "Qualify Leads"}
         </button>
         <p style={{ textAlign: "center", fontSize: "0.68rem", color: G.muted, marginTop: 10 }}>
-          {mode === "generate" ? "10 qualified leads with outreach messages - 15-25 seconds" : "AI qualifies your context and writes outreach - 15-25 seconds"}
+          {mode === "generate" ? "Searches Google live for real Web3 projects - 20-35 seconds" : "AI qualifies your context and writes outreach - 15-25 seconds"}
         </p>
       </div>
     </div>
