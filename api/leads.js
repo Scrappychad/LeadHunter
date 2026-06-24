@@ -1,32 +1,60 @@
-async function searchWeb(query, serperKey) {
+async function serperSearch(query, serperKey, num = 10) {
   try {
     const res = await fetch("https://google.serper.dev/search", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-KEY": serperKey,
-      },
-      body: JSON.stringify({ q: query, num: 5 }),
+      headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
+      body: JSON.stringify({ q: query, num }),
     });
     const data = await res.json();
-    const results = data.organic || [];
-    return results.map(r => `${r.title} - ${r.link}\n${r.snippet}`).join("\n\n");
-  } catch {
-    return null;
-  }
+    return (data.organic || []).map(r => `TITLE: ${r.title}\nURL: ${r.link}\nSNIPPET: ${r.snippet}`).join("\n\n---\n\n");
+  } catch { return null; }
 }
 
-async function verifyLead(lead, serperKey) {
-  // Search for the company to verify and enrich details
-  const query = `${lead.name} ${lead.industry || ""} website twitter`;
-  const results = await searchWeb(query, serperKey);
-  if (!results) return lead;
+function buildSearchQueries(body) {
+  const niche = body.niche || "";
+  const type = body.type || "";
+  const service = body.service || "";
+  const platform = body.platform || "";
 
-  // Second search specifically for their Twitter/X
-  const twitterQuery = `${lead.name} site:twitter.com OR site:x.com`;
-  const twitterResults = await searchWeb(twitterQuery, serperKey);
+  // Determine industry scope
+  const isWeb3 = /web3|crypto|defi|nft|blockchain|wallet|dao|token/i.test(niche + type);
+  const isSaaS = /saas|software|startup|tech/i.test(niche + type);
+  const isAI = /ai|artificial intelligence|machine learning/i.test(niche + type);
+  const isFintech = /fintech|finance|payment/i.test(niche + type);
 
-  return { ...lead, _searchResults: results, _twitterResults: twitterResults || "" };
+  const queries = [];
+
+  // Primary discovery queries
+  queries.push(`new ${niche} startup recently launched 2024 2025 site:twitter.com OR site:x.com`);
+  queries.push(`"just launched" OR "new project" ${niche} ${type} twitter handle`);
+
+  // Industry-specific queries
+  if (isWeb3 || (!isSaaS && !isAI && !isFintech)) {
+    queries.push(`new crypto web3 DeFi NFT project launched 2024 2025 twitter x.com`);
+    queries.push(`new blockchain wallet DAO project site:x.com 2024 2025`);
+    queries.push(`"launching soon" OR "just launched" web3 project twitter 2025`);
+  }
+  if (isSaaS || niche === "") {
+    queries.push(`new SaaS startup product launched 2024 2025 twitter`);
+  }
+  if (isAI || niche === "") {
+    queries.push(`new AI tool product launched 2024 2025 twitter site:x.com`);
+  }
+  if (isFintech) {
+    queries.push(`new fintech startup launched 2024 2025 twitter`);
+  }
+
+  // Platform-specific
+  if (platform && /product hunt/i.test(platform)) {
+    queries.push(`site:producthunt.com ${niche} new product 2024 2025`);
+  }
+
+  // Service-pain-point match
+  if (service) {
+    queries.push(`${niche} project "looking for" OR "need help with" ${service} twitter 2024 2025`);
+  }
+
+  return queries.slice(0, 4); // Max 4 searches to stay within free tier
 }
 
 export default async function handler(req, res) {
@@ -40,90 +68,120 @@ export default async function handler(req, res) {
   const apiKey = process.env.GROQ_API_KEY;
   const serperKey = process.env.SERPER_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "GROQ_API_KEY not set" });
+  if (!serperKey) return res.status(500).json({ error: "SERPER_API_KEY not set" });
 
   try {
     const body = req.body;
-    const messages = body.messages || [];
+    const isQualify = body.mode === "qualify";
 
-    // Step 1: Get lead names and basic info from AI
-    const firstPass = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    if (isQualify) {
+      // Qualify mode - just pass context to AI directly
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          max_tokens: 6000,
+          temperature: 0.7,
+          messages: [
+            {
+              role: "system",
+              content: `You are an elite growth operator qualifying leads. Quality over quantity. Return only valid JSON - no markdown, no explanation.
+ACCURACY: Only state facts from the provided context. Never fabricate URLs or social handles.`,
+            },
+            ...(body.messages || []),
+          ],
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) return res.status(response.status).json({ error: data?.error?.message || "Groq error" });
+      const text = data.choices?.[0]?.message?.content || "";
+      if (!text) return res.status(500).json({ error: "Empty response" });
+      return res.status(200).json({ content: [{ type: "text", text }] });
+    }
+
+    // Generate mode - Serper first, then AI qualifies
+    const queries = buildSearchQueries(body);
+
+    // Run all searches in parallel
+    const searchResults = await Promise.all(
+      queries.map(q => serperSearch(q, serperKey, 8))
+    );
+
+    const combinedResults = searchResults
+      .filter(Boolean)
+      .join("\n\n========\n\n");
+
+    if (!combinedResults) {
+      return res.status(500).json({ error: "Search returned no results. Try a different niche or industry." });
+    }
+
+    // AI qualifies the real search results
+    const qualifyPrompt = `You are an elite growth operator. You have been given live Google search results for recently active projects in the following niche: ${body.niche || "tech/Web3"}.
+
+Your job is to extract and qualify the BEST leads from these search results.
+
+QUALIFICATION FILTERS:
+- Must be a real, active project (has a website or X handle visible in results)
+- Must appear recently launched or recently active (2024 or 2025 signals preferred)
+- Must show pain signals: early stage, small team, no obvious professional growth operation
+- Must have potential to pay for services like: ${body.service || "growth strategy, brand, marketing"}
+- Skip established companies with strong brand recognition
+- Prioritize Web3/crypto projects but include SaaS, AI tools, fintech if they appear strong
+
+INDUSTRIES IN SCOPE (Web3 is priority):
+Web3, DeFi, NFTs, crypto wallets, DAOs, L2s, SaaS startups, AI tools, fintech, developer tools
+
+ABILITY TO PAY SCORING:
+- 8-10: Has raised funding, hiring actively, or has visible traction
+- 5-7: Early but serious - active team, product launched
+- 1-4: Too early or unclear
+
+SEARCH RESULTS FROM GOOGLE (these are REAL, live results):
+${combinedResults.slice(0, 8000)}
+
+From these real search results, extract up to 10 qualifying leads. Only include projects you can confirm exist from the search results. Return valid JSON only, no markdown:
+
+[
+  {
+    "name": "Project Name",
+    "website": "https://... (from search results only, empty string if not found)",
+    "twitter": "@handle (from search results only, empty string if not found)",
+    "industry": "Web3 / DeFi / SaaS / AI / Fintech / etc",
+    "overview": "2-3 sentence description based only on search result snippets",
+    "signals": {
+      "activity": "Specific evidence from search results showing they are active",
+      "pain": "Specific visible problem or gap based on what the search results show",
+      "capability": "Why they are worth targeting - signals from search results",
+      "timing": "Why now is the right time based on search result recency"
+    },
+    "growth_gaps": "What is clearly missing based on their online presence in the search results",
+    "leverage_angle": "Where a growth strategist steps in based on their specific situation",
+    "score": 7,
+    "outreach": "4-5 sentence personalized message. Reference something specific from the search results. No fluff. Must feel written after real research."
+  }
+]`;
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
-        max_tokens: body.max_tokens || 6000,
-        temperature: 0.8,
-        messages: [
-          {
-            role: "system",
-            content: `You are an elite growth operator identifying high-quality early-stage leads.
-Quality over quantity. Return only valid JSON - no markdown, no explanation, no code blocks.
-
-TARGET: Pre-launch or recently launched companies (0-6 months). Not established players. Not well-known brands.
-AVOID: Any company with strong brand recognition, 50k+ followers, or an obvious professional growth team.
-
-NOTE: Do not worry about websites or Twitter handles - leave those as empty strings. A separate system will verify and fill them in from live search results. Focus only on finding the right companies and writing accurate analysis.`
-          },
-          ...messages
-        ],
+        max_tokens: 6000,
+        temperature: 0.7,
+        messages: [{ role: "user", content: qualifyPrompt }],
       }),
     });
 
-    const firstData = await firstPass.json();
-    if (!firstPass.ok) return res.status(firstPass.status).json({ error: firstData?.error?.message || "Groq error" });
+    const data = await response.json();
+    if (!response.ok) return res.status(response.status).json({ error: data?.error?.message || "Groq error" });
 
-    let text = firstData.choices?.[0]?.message?.content || "";
-    if (!text) return res.status(500).json({ error: "Empty response from model" });
-
-    // Step 2: Parse leads and verify with Serper
-    if (serperKey) {
-      try {
-        const clean = text.replace(/```json|```/g, "").trim();
-        const start = clean.indexOf("[");
-        const end = clean.lastIndexOf("]");
-        if (start !== -1 && end !== -1) {
-          const leads = JSON.parse(clean.slice(start, end + 1));
-
-          // Verify each lead with live search (parallel)
-          const verified = await Promise.all(leads.map(lead => verifyLead(lead, serperKey)));
-
-          // Step 3: Ask AI to fill in real URLs from search results
-          const enrichPrompt = `You have search results for each of these leads. Extract the correct website URL and Twitter/X handle from the search results for each lead. Return the same JSON array with website and twitter fields filled in accurately based on the search results. If you cannot find a verified URL or handle from the search results, use empty string.
-
-LEADS WITH SEARCH RESULTS:
-${verified.map((l, i) => `
-Lead ${i + 1}: ${l.name}
-Search Results: ${l._searchResults || "No results"}
-Twitter Search: ${l._twitterResults || "No results"}
-`).join("\n")}
-
-Return the full leads array as valid JSON with corrected website and twitter fields. Keep all other fields exactly as they are. No markdown, no explanation, just JSON.`;
-
-          const enrichPass = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-            body: JSON.stringify({
-              model: "llama-3.3-70b-versatile",
-              max_tokens: 4000,
-              temperature: 0.1,
-              messages: [
-                { role: "user", content: enrichPrompt },
-                { role: "assistant", content: clean.slice(start, end + 1) }
-              ],
-            }),
-          });
-
-          const enrichData = await enrichPass.json();
-          const enrichedText = enrichData.choices?.[0]?.message?.content || "";
-          if (enrichedText) text = enrichedText;
-        }
-      } catch {
-        // If enrichment fails, return original text
-      }
-    }
+    const text = data.choices?.[0]?.message?.content || "";
+    if (!text) return res.status(500).json({ error: "Empty response" });
 
     return res.status(200).json({
       content: [{ type: "text", text }],
+      searchesRun: queries.length,
     });
 
   } catch (err) {

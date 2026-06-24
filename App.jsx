@@ -503,13 +503,49 @@ export default function LeadHunter() {
   };
 
   const submit = async () => {
-    const form = mode === "generate" ? genForm : qualForm;
     if (mode === "generate" && !genForm.niche.trim()) { setError("Niche is required."); return; }
     if (mode === "qualify" && !qualForm.context.trim()) { setError("Paste some context to qualify."); return; }
     setError(""); setStep("loading");
     try {
-      const prompt = mode === "generate" ? buildGeneratePrompt(genForm) : buildQualifyPrompt(qualForm);
-      const raw = await askGroq([{ role: "user", content: prompt }], 6000);
+      let raw;
+      if (mode === "generate") {
+        // Pass form fields directly to backend for Serper query building
+        const res = await fetch("/api/leads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "generate",
+            niche: genForm.niche,
+            type: genForm.type,
+            service: genForm.service,
+            platform: genForm.platform,
+            description: genForm.description,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        raw = data?.content?.[0]?.text || "";
+      } else {
+        const res = await fetch("/api/leads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "qualify",
+            messages: [{ role: "user", content: buildQualifyPrompt(qualForm) }],
+            max_tokens: 6000,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err?.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        raw = data?.content?.[0]?.text || "";
+      }
+      if (!raw) throw new Error("Empty response. Please try again.");
       const parsed = parseLeads(raw);
       if (!parsed) throw new Error("AI did not return valid leads. Please try again.");
       setLeads(parsed); setStep("results");
@@ -522,7 +558,7 @@ export default function LeadHunter() {
       <div style={{ textAlign: "center" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}><Spinner /></div>
         {(mode === "generate"
-          ? ["Scanning the niche...", "Filtering weak leads...", "Scoring prospects...", "Writing outreach messages..."]
+          ? ["Searching Google for real projects...", "Reading live search results...", "Qualifying and scoring leads...", "Writing personalized outreach..."]
           : ["Reading your context...", "Qualifying each lead...", "Scoring prospects...", "Writing outreach messages..."]
         ).map((t, i) => (
           <div key={i} style={{ fontSize: "0.73rem", color: G.muted, fontFamily: "IBM Plex Mono, monospace", marginTop: 10, animation: `fadeUp 0.4s ease ${i * 0.18}s both` }}>{t}</div>
@@ -568,7 +604,7 @@ export default function LeadHunter() {
             <>
               <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.12em", color: G.accent, marginBottom: 20, fontWeight: 600 }}>Hunt Parameters</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 18px" }}>
-                <TInput label="Niche / Industry *" value={genForm.niche} onChange={setG("niche")} placeholder="e.g. Web3 DeFi protocols, SaaS fintech startups" />
+                <TInput label="Niche / Industry *" value={genForm.niche} onChange={setG("niche")} placeholder="e.g. DeFi protocols, AI tools, SaaS startups, NFT projects, fintech" hint="Web3 is priority but any tech industry works" />
                 <TInput label="Company Type" value={genForm.type} onChange={setG("type")} placeholder="e.g. Web3, Web2, Both" />
               </div>
               <TInput label="Service You're Offering" value={genForm.service} onChange={setG("service")}
