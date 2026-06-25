@@ -53,12 +53,19 @@ export default async function handler(req, res) {
 
     const service = body.service || "growth strategy and brand architecture";
 
-    // Hardcoded Web3 search queries
+    // Hardcoded Web3 search queries - strictly recent launches only
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().toLocaleString("en-US", { month: "long" });
+    const lastMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toLocaleString("en-US", { month: "long" });
+
+    // Exclude major established projects from results
+    const excludeEstablished = "-sui -solana -ethereum -bitcoin -polygon -binance -avalanche -chainlink -uniswap -aave -compound -opensea -metamask -coinbase -kraken -pi network -ripple -cardano -polkadot -near -aptos -arbitrum -optimism -base -zksync";
+
     const queries = [
-      `new Web3 crypto project launched 2024 2025 site:x.com OR site:twitter.com`,
-      `new DeFi NFT wallet DAO project "just launched" OR "launching" 2025 twitter`,
-      `new crypto blockchain project site:linkedin.com 2024 2025`,
-      `new web3 utility token L2 project recently launched website twitter linkedin`,
+      `"just launched" OR "launching today" OR "goes live" web3 crypto project ${currentMonth} ${currentYear} site:x.com OR site:twitter.com ${excludeEstablished}`,
+      `new DeFi NFT DAO wallet project "launched" ${currentMonth} OR ${lastMonth} ${currentYear} -established -major ${excludeEstablished}`,
+      `"new project" crypto web3 "seed round" OR "presale" OR "testnet" OR "beta" ${currentYear} ${excludeEstablished}`,
+      `early stage web3 startup crypto project ${currentMonth} ${currentYear} site:linkedin.com ${excludeEstablished}`,
     ];
 
     // Run all searches in parallel
@@ -80,11 +87,18 @@ SERVICE BEING OFFERED: ${service}
 
 QUALIFICATION FILTERS:
 - Must be a real, active Web3 project visible in the search results
-- Must be early-stage or recently launched (2024 or 2025 signals preferred)
-- Must have visible pain signals: small team, early community, no professional growth operation yet
+- Must have launched or gone public in 2026 - reject anything older
+- Must be early-stage: small team, early community, no professional growth operation
 - Must have potential to pay for growth, brand, or marketing services
-- Skip established projects with large communities or strong brand recognition
-- Web3 scope: DeFi, NFTs, wallets, DAOs, L2s, utility tokens, crypto infrastructure, GameFi, SocialFi
+
+HARD REJECTIONS - immediately discard any project that is:
+- A well-known or established project (Sui, Solana, Ethereum, Bitcoin, Pi Network, Polygon, Binance, Avalanche, Chainlink, Uniswap, Aave, OpenSea, MetaMask, Coinbase, Arbitrum, Optimism, Base, zkSync, Aptos, Near, Cardano, Polkadot, Ripple, or anything similarly large)
+- Has more than 50,000 followers on any platform
+- Has been covered extensively by major crypto media
+- Is a layer-1 or layer-2 blockchain that launched before 2026
+- Is a major exchange, wallet, or infrastructure provider
+
+Web3 scope: DeFi, NFTs, wallets, DAOs, L2s, utility tokens, crypto infrastructure, GameFi, SocialFi
 
 SCORING (ability to pay):
 - 8-10: Raised funding, hiring, or has visible traction and revenue signals
