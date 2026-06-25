@@ -505,7 +505,7 @@ export default function LeadHunter() {
   };
 
   const submit = async () => {
-    if (mode === "generate" && !genForm.niche.trim()) { setError("Niche is required."); return; }
+    // Web3 hardcoded - no niche validation needed
     if (mode === "qualify" && !qualForm.context.trim()) { setError("Paste some context to qualify."); return; }
     setError(""); setStep("loading");
     try {
@@ -517,7 +517,7 @@ export default function LeadHunter() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mode: "generate",
-            niche: genForm.niche,
+            niche: "web3 crypto DeFi NFT blockchain",
             type: genForm.type,
             service: genForm.service,
             platform: genForm.platform,
